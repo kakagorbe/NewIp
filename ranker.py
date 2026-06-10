@@ -31,6 +31,8 @@ STABLE_PORTS = {
 
 STABLE_PORT_BONUS = 1
 
+MAX_OUTPUT_IPS = 4000
+
 
 def load_https():
     data = {}
@@ -340,97 +342,126 @@ def load_domains_raw():
     return domains
 
 
+def load_previous_best_ips():
+    if not os.path.exists(BEST_FILE):
+        return []
+
+    previous = []
+
+    try:
+        with open(BEST_FILE, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                parts = line.split()
+                if len(parts) < 2:
+                    continue
+                ip_port = parts[0]
+                try:
+                    score_val = int(parts[1].replace("S=", ""))
+                except:
+                    score_val = 0
+                if ":" in ip_port:
+                    previous.append({
+                        "ip": ip_port.split(":")[0],
+                        "port": int(ip_port.split(":")[1]),
+                        "score": score_val,
+                        "is_new": False
+                    })
+    except:
+        pass
+
+    return previous
+
+
+def merge_and_limit(new_items, previous_items):
+    combined = []
+
+    for item in new_items:
+        combined.append({
+            "ip": item["ip"],
+            "port": item["port"],
+            "score": item["score"],
+            "is_new": True,
+            "latency": item.get("latency", 9999),
+            "cdn": item.get("cdn", "unknown"),
+            "country": item.get("country", "?"),
+            "provider": item.get("provider", "?"),
+            "alpn": item.get("alpn", ""),
+            "https": item.get("https", {})
+        })
+
+    for old in previous_items:
+        combined.append(old)
+
+    combined.sort(key=lambda x: (-x["score"], 0 if x["is_new"] else 1, x.get("latency", 9999)))
+
+    seen_keys = set()
+    limited = []
+
+    for item in combined:
+        key = f"{item['ip']}:{item['port']}"
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        limited.append(item)
+        if len(limited) >= MAX_OUTPUT_IPS:
+            break
+
+    return limited
+
+
 def rank_results():
     data = load_results()
     https_map = load_https()
     domains = load_domains_raw()
+    previous_best = load_previous_best_ips()
 
-    ranked = []
+    new_scored_items = []
 
     for item in data:
-
-        key = (
-            f'{item["ip"]}:'
-            f'{item["port"]}'
-        )
-
-        https_info = https_map.get(
-            key
-        )
-
+        key = f'{item["ip"]}:{item["port"]}'
+        https_info = https_map.get(key)
         item["https"] = https_info
-        item["score"] = score(
-            item,
-            https_info
-        )
+        item["score"] = score(item, https_info)
+        new_scored_items.append(item)
 
-        ranked.append(
-            item
-        )
+    merged_items = merge_and_limit(new_scored_items, previous_best)
 
-    ranked.sort(
-        key=lambda x: (
-            -x["score"],
-            x.get(
-                "latency",
-                9999
-            ),
-            x.get(
-                "port",
-                65535
-            )
-        )
-    )
+    os.makedirs("output", exist_ok=True)
 
-    os.makedirs(
-        "output",
-        exist_ok=True
-    )
-
-    with open(
-        BEST_FILE,
-        "w",
-        encoding="utf-8"
-    ) as f:
-
-        for item in ranked:
-
-            https_info = item.get(
-                "https"
-            ) or {}
-
-            ttfb = https_info.get(
-                "ttfb",
-                "-"
-            )
-
-            proto = https_info.get(
-                "proto",
-                "-"
-            )
-
-            rel = https_info.get(
-                "reliability",
-                "-"
-            )
+    with open(BEST_FILE, "w", encoding="utf-8") as f:
+        for item in merged_items:
+            https_info = item.get("https") or {}
+            ttfb = https_info.get("ttfb", "-")
+            proto = https_info.get("proto", "-")
+            rel = https_info.get("reliability", "-")
+            latency = item.get("latency", 9999)
+            cdn = item.get("cdn", "unknown")
+            alpn = item.get("alpn", "")
+            country = item.get("country", "?")
+            provider = item.get("provider", "?")
 
             f.write(
                 f'{item["ip"]}:{item["port"]} '
                 f'S={item["score"]} '
-                f'{item["latency"]}ms '
+                f'{latency}ms '
                 f'TTFB={ttfb} '
                 f'PROTO={proto} '
                 f'REL={rel} '
-                f'CDN={item["cdn"]} '
-                f'ALPN={item["alpn"]} '
-                f'{item["country"]} '
-                f'{item["provider"]}\n'
+                f'CDN={cdn} '
+                f'ALPN={alpn} '
+                f'{country} '
+                f'{provider}\n'
             )
 
     print(
-        f"RANKED={len(ranked)} "
+        f"RANKED={len(data)} "
         f"HTTPS={len(https_map)} "
-        f"DOMAINS={len(domains)}"
+        f"DOMAINS={len(domains)} "
+        f"BEST_IPS={len(merged_items)} "
+        f"MAX_LIMIT={MAX_OUTPUT_IPS}"
     )
 
 
