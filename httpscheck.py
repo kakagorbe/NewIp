@@ -7,6 +7,7 @@ import aiohttp
 TLS_PORTS = {443, 8443, 2053, 2083, 2087, 2096}
 _SSL_CONTEXT_CACHE = {}
 _ALPN_CACHE = {}
+_CONNECTION_CACHE = {}
 
 def scheme_for(port: int) -> str:
     return "https" if port in TLS_PORTS else "http"
@@ -114,6 +115,9 @@ async def https_check(
                 ttfb_list.append(ttfb)
                 ok_count += 1
 
+                if ok_count >= 2 and all(c in {200, 204, 206, 301, 302} for c in status_codes):
+                    break
+
         except:
             continue
 
@@ -181,6 +185,8 @@ async def check_multiple_ips(
     retries: int = 5
 ) -> Dict[Tuple[str, int], Tuple[bool, Dict[str, Any] | None]]:
 
+    effective_retries = 3 if retries > 3 else retries
+    
     sem = asyncio.Semaphore(concurrency)
 
     timeout_cfg = aiohttp.ClientTimeout(
@@ -191,7 +197,8 @@ async def check_multiple_ips(
 
     connector = aiohttp.TCPConnector(
         limit=concurrency,
-        limit_per_host=0,
+        limit_per_host=concurrency // 4,
+        ttl_dns_cache=300,
         ssl=False,
         enable_cleanup_closed=True,
         force_close=True
@@ -210,21 +217,25 @@ async def check_multiple_ips(
                         ip,
                         port,
                         timeout,
-                        retries
+                        effective_retries
                     )
                 except:
                     return False, None
 
-        tasks = {
-            asyncio.create_task(worker(ip, port)): (ip, port)
-            for ip, port in ip_port_list
-        }
+        tasks = []
+        items = []
+        for ip, port in ip_port_list:
+            tasks.append(asyncio.create_task(worker(ip, port)))
+            items.append((ip, port))
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
 
         output = {}
-
-        for task in asyncio.as_completed(tasks):
-            ip, port = tasks[task]
-            output[(ip, port)] = await task
+        for (ip, port), result in zip(items, results):
+            if isinstance(result, Exception):
+                output[(ip, port)] = (False, None)
+            else:
+                output[(ip, port)] = result
 
         return output
 
