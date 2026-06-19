@@ -1,0 +1,161 @@
+import asyncio
+import os
+import random
+
+from downloader import Downloader
+from exporter import Exporter
+from core.cidr_stream import CIDRStream
+from core.tcp_worker import TCPWorker
+from core.https_worker import HTTPSWorker
+from core.https_cache import HTTPSCache
+from core.topk import TopK
+from core.checkpoint import Checkpoint
+from core.rate_limiter import RateLimiter
+from core.cache import Cache
+from core.logger import get_logger, Metrics
+from core.backpressure import Backpressure
+from core.adaptive import AdaptiveWorkers
+from core.circuit_breaker import CircuitBreaker
+from core.dedup import DedupStore
+
+async def pipeline(cfg):
+    logger = get_logger("v18.2")
+    metrics = Metrics()
+
+    shard_id = int(os.getenv("SHARD_ID", "0"))
+
+    ckpt = Checkpoint(shard_id, cfg["checkpoint_every"])
+    cache = Cache()
+    https_cache = HTTPSCache()
+    dedup = DedupStore()
+
+    rate = RateLimiter(cfg["rate_limit_per_subnet"])
+
+    cb = CircuitBreaker(
+        cfg["circuit_breaker_failures"],
+        cfg["circuit_breaker_reset_sec"]
+    )
+
+    data = await Downloader.fetch_all(cfg["sources"])
+
+    cidrs = []
+    for v in data.values():
+        cidrs.extend(v)
+
+    stream = CIDRStream(cidrs, cfg["sample_per_source"])
+
+    q = asyncio.Queue(maxsize=cfg["queue_size"])
+    back = Backpressure(q, 0.75)
+
+    tcp = TCPWorker(cfg["timeout"], cb, cache)
+    https = HTTPSWorker(cfg["timeout"], cb, cache, https_cache)
+    topk = TopK(cfg["keep_top"])
+
+    quality_total = 0
+    quality_ok = 0
+    workers = set()
+
+    async def producer():
+        i = ckpt.load()
+
+        for ip in stream.stream():
+            i += 1
+            metrics.inc("produced")
+
+            if dedup.seen(ip):
+                continue
+
+            subnet = ".".join(ip.split(".")[:3])
+
+            if not rate.allow(subnet):
+                metrics.inc("fail")
+                continue
+
+            await back.wait()
+
+            await q.put((i, ip))
+
+            if i % cfg["checkpoint_every"] == 0:
+                ckpt.save(i)
+
+            if cfg.get("random_delay_ms"):
+                await asyncio.sleep(random.uniform(0, cfg["random_delay_ms"] / 1000))
+
+    async def worker():
+        nonlocal quality_total, quality_ok
+
+        while True:
+            i, ip = await q.get()
+            try:
+                metrics.inc("consumed")
+
+                tcp_res = await tcp.probe(ip, cfg["ports"])
+
+                if not tcp_res:
+                    continue
+
+                tcp_res = sorted(tcp_res, key=lambda x: x[2])
+                top_half = tcp_res[:max(1, len(tcp_res)//2)]
+
+                found = False
+                for ip2, port, tcp_latency in top_half:
+                    for sni in cfg["sni_hosts"]:
+                        r = await https.test(ip2, port, sni)
+                        if r:
+                            quality_ok += 1
+                            topk.push(r)
+                            found = True
+                            break
+                    if found:
+                        break
+                    quality_total += 1
+            finally:
+                q.task_done()
+
+    async def worker_manager():
+        adaptive = AdaptiveWorkers(
+            cfg["worker_pool_min"],
+            cfg["worker_pool_max"],
+            q
+        )
+
+        while True:
+            desired = adaptive.compute()
+
+            while len(workers) < desired:
+                t = asyncio.create_task(worker())
+                workers.add(t)
+
+            while len(workers) > desired:
+                t = workers.pop()
+                t.cancel()
+
+            await asyncio.sleep(1)
+
+    async def checkpoint_loop():
+        while True:
+            dedup.cleanup()
+            await asyncio.sleep(300)
+
+    prod = asyncio.create_task(producer())
+    manager = asyncio.create_task(worker_manager())
+    ckpt_task = asyncio.create_task(checkpoint_loop())
+
+    await prod
+    await q.join()
+
+    for w in workers:
+        w.cancel()
+
+    manager.cancel()
+    ckpt_task.cancel()
+
+    await asyncio.gather(*workers, return_exceptions=True)
+    await asyncio.gather(manager, ckpt_task, return_exceptions=True)
+
+    Exporter.save(topk.items(), shard_id)
+
+    logger.info({
+        "quality_score": quality_ok / max(1, quality_total),
+        "buffer": 0
+    })
