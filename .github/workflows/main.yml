@@ -47,19 +47,17 @@ jobs:
         with:
           path: output/
 
-      - run: |
-          python main.py
-          cat output/global_best.txt
+      - run: python main.py
 
       - uses: actions/upload-artifact@v4
         with:
           name: global
           path: output/global_best.txt
 
-      - name: Commit and push output to repository
+      - name: Commit and push global_best.txt
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git add output/global_best.txt
+          git add global_best.txt output/global_best.txt
           git diff --staged --quiet || git commit -m "Update IP list"
           git push
