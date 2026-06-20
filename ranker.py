@@ -113,7 +113,7 @@ def parse_line(line):
 
     parts = line.split("|")
 
-    if len(parts) < 8:
+    if len(parts) < 10:
         return None
 
     try:
@@ -126,17 +126,15 @@ def parse_line(line):
     except:
         return None
 
-    tls = parts[3] == "True"
-
     return {
         "ip": parts[0],
         "port": port,
         "latency": latency,
-        "tls": tls,
-        "cdn": parts[4],
-        "country": parts[5],
-        "provider": parts[6],
-        "alpn": parts[7]
+        "tls": False,
+        "cdn": parts[7],
+        "country": parts[8],
+        "provider": parts[9],
+        "alpn": ""
     }
 
 
