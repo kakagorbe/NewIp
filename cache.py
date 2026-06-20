@@ -538,6 +538,32 @@ def geo_store(
     )
 
 
+def compact_cache_files():
+    ensure_output()
+
+    cache = load_cache()
+
+    if cache:
+        clean_cache = {}
+
+        for key in cache:
+            if cache[key] != "failed":
+                clean_cache[key] = cache[key]
+
+        if len(clean_cache) < len(cache):
+            save_cache(clean_cache)
+
+    geo = load_geo_cache()
+
+    if geo:
+        save_geo_cache(geo)
+
+    return {
+        "cache": len(load_cache()),
+        "geo": len(load_geo_cache())
+    }
+
+
 if __name__ == "__main__":
     res = optimize_stage_files()
 
