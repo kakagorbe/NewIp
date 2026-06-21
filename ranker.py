@@ -113,7 +113,7 @@ def parse_line(line):
 
     parts = line.split("|")
 
-    if len(parts) < 10:
+    if len(parts) < 8:
         return None
 
     try:
@@ -126,15 +126,17 @@ def parse_line(line):
     except:
         return None
 
+    tls = parts[3] == "True"
+
     return {
         "ip": parts[0],
         "port": port,
         "latency": latency,
-        "tls": False,
-        "cdn": parts[7],
-        "country": parts[8],
-        "provider": parts[9],
-        "alpn": ""
+        "tls": tls,
+        "cdn": parts[4],
+        "country": parts[5],
+        "provider": parts[6],
+        "alpn": parts[7]
     }
 
 
@@ -373,6 +375,14 @@ def load_previous_best_ips():
     return previous
 
 
+def filter_incomplete_items(items):
+    return [
+        item for item in items
+        if item.get('https') and 
+        item['https'].get('ttfb', -1) > 0
+    ]
+
+
 def merge_and_limit(new_items, previous_items):
     combined = []
 
@@ -425,7 +435,9 @@ def rank_results():
         item["score"] = score(item, https_info)
         new_scored_items.append(item)
 
-    merged_items = merge_and_limit(new_scored_items, previous_best)
+    filtered_items = filter_incomplete_items(new_scored_items)
+
+    merged_items = merge_and_limit(filtered_items, previous_best)
 
     os.makedirs("output", exist_ok=True)
 
