@@ -185,30 +185,6 @@ def split_file(
 
     return OUTPUT_FILE
 
-def get_split_status(infile=INPUT_FILE):
-    cfg = load_config()
-    batch_size = cfg.get("batch_size", 20000)
-    total = count_lines(infile)
-    cursor = load_cursor()
-    
-    if total <= 0:
-        return {"total": 0, "cursor": 0, "batch_size": batch_size, "progress": 0}
-    
-    if cursor >= total:
-        cursor = 0
-    
-    progress = round((cursor / total) * 100, 2)
-    if progress > 100:
-        progress = 100
-    
-    return {
-        "total": total,
-        "cursor": cursor,
-        "batch_size": batch_size,
-        "progress": progress,
-        "remaining": total - cursor
-    }
-
 
 if __name__ == "__main__":
     split_file()
