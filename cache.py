@@ -8,6 +8,7 @@ HTTPS_FILE = "output/https_live.txt"
 FP_FILE = "output/fingerprint_results.txt"
 GEO_FILE = "output/geo_cache.json"
 HTTPS_META_FILE = "output/https_meta.json"
+LIVE_BANK_FILE = "output/live_bank.txt"
 
 
 def ensure_output():
@@ -562,6 +563,56 @@ def compact_cache_files():
         "cache": len(load_cache()),
         "geo": len(load_geo_cache())
     }
+
+
+def reset_stage_files():
+    ensure_output()
+
+    stage_files = [TCP_FILE, TLS_FILE, HTTPS_FILE, FP_FILE]
+
+    for file_path in stage_files:
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except:
+                pass
+
+    return {"reset": len(stage_files)}
+
+
+def migrate_live_bank_to_cache():
+    ensure_output()
+
+    if not os.path.exists(LIVE_BANK_FILE):
+        return 0
+
+    cache = load_cache()
+    migrated = 0
+
+    try:
+        with open(LIVE_BANK_FILE, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                parts = line.split(":")
+                if len(parts) >= 2:
+                    ip = parts[0]
+                    try:
+                        port = int(parts[1])
+                        if cache_key(ip, port) not in cache:
+                            cache[cache_key(ip, port)] = "success"
+                            migrated += 1
+                    except:
+                        continue
+
+        if migrated > 0:
+            save_cache(cache)
+
+        return migrated
+
+    except:
+        return 0
 
 
 if __name__ == "__main__":
