@@ -845,7 +845,3 @@ def geo_scan():
         f.write(
             "\n".join(final)
         )
-
-    print(
-        f"GEO DONE={len(final)}"
-    )
