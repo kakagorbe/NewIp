@@ -57,74 +57,49 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Restore Rolling State
+      - name: Restore Permanent State
         uses: actions/download-artifact@v4
         with:
-          name: arista-output
+          name: arista-permanent
           path: output
         continue-on-error: true
+
+      - name: Clean Temp Files
+        run: |
+          mkdir -p output
+          # حذف فایل‌های موقت برای جلوگیری از بزرگ شدن artifact
+          rm -f output/ip_bank.txt output/clean_ips.txt output/current_part.txt output/scanned_cache.txt
+          rm -f output/results.txt output/domains.txt output/domains_raw.txt 2>/dev/null || true
 
       - name: Prepare Bank
         run: |
           mkdir -p output
-          if [ ! -s output/ip_bank.txt ]; then
-            python downloader.py
-          fi
-          if [ ! -s output/clean_ips.txt ]; then
-            python cleaner.py
-          fi
+          python downloader.py
+          python cleaner.py
 
       - name: Compact Cache
         run: |
           python -c "from cache import compact_cache_files; compact_cache_files()"
 
-      - name: Save Rolling State
+      - name: Save Permanent State (No Temp Files)
         uses: actions/upload-artifact@v4
         with:
-          name: arista-output
-          path: output
-          overwrite: true
-          retention-days: 3
-
-  cleanup:
-    needs: prepare
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 1
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.14"
-          cache: pip
-      - run: pip install -r requirements.txt
-      
-      - name: Restore State
-        uses: actions/download-artifact@v4
-        with:
-          name: arista-output
-          path: output
-        continue-on-error: true
-      
-      - name: Compact Artifact
-        run: |
-          echo "=== BEFORE COMPACT ==="
-          du -sh output/
-          python state_manager.py
-          echo "=== AFTER COMPACT ==="
-          du -sh output/
-      
-      - name: Save Clean State
-        uses: actions/upload-artifact@v4
-        with:
-          name: arista-output
-          path: output
+          name: arista-permanent
+          path: |
+            output/best_ips.txt
+            output/live_bank.txt
+            output/tcp_live.txt
+            output/tls_live.txt
+            output/https_live.txt
+            output/fingerprint_results.txt
+            output/geo_cache.json
+            output/scan_cursor.txt
+            output/https_meta.json
           overwrite: true
           retention-days: 3
 
   tcp:
-    needs: cleanup
+    needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 55
 
@@ -138,21 +113,39 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
 
-      - name: Restore State
+      - name: Restore Permanent State
         uses: actions/download-artifact@v4
         with:
-          name: arista-output
+          name: arista-permanent
           path: output
         continue-on-error: true
+
+      - name: Ensure Temp Files
+        run: |
+          mkdir -p output
+          # اطمینان از وجود clean_ips.txt از prepare
+          if [ ! -s output/clean_ips.txt ]; then
+            python downloader.py
+            python cleaner.py
+          fi
 
       - name: TCP Scan
         run: python main.py --tcp
 
-      - name: Save State
+      - name: Save Permanent State
         uses: actions/upload-artifact@v4
         with:
-          name: arista-output
-          path: output
+          name: arista-permanent
+          path: |
+            output/best_ips.txt
+            output/live_bank.txt
+            output/tcp_live.txt
+            output/tls_live.txt
+            output/https_live.txt
+            output/fingerprint_results.txt
+            output/geo_cache.json
+            output/scan_cursor.txt
+            output/https_meta.json
           overwrite: true
           retention-days: 3
 
@@ -171,21 +164,30 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
 
-      - name: Restore State
+      - name: Restore Permanent State
         uses: actions/download-artifact@v4
         with:
-          name: arista-output
+          name: arista-permanent
           path: output
         continue-on-error: true
 
       - name: TLS Scan
         run: python main.py --tls
 
-      - name: Save State
+      - name: Save Permanent State
         uses: actions/upload-artifact@v4
         with:
-          name: arista-output
-          path: output
+          name: arista-permanent
+          path: |
+            output/best_ips.txt
+            output/live_bank.txt
+            output/tcp_live.txt
+            output/tls_live.txt
+            output/https_live.txt
+            output/fingerprint_results.txt
+            output/geo_cache.json
+            output/scan_cursor.txt
+            output/https_meta.json
           overwrite: true
           retention-days: 3
 
@@ -204,21 +206,30 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
 
-      - name: Restore State
+      - name: Restore Permanent State
         uses: actions/download-artifact@v4
         with:
-          name: arista-output
+          name: arista-permanent
           path: output
         continue-on-error: true
 
       - name: HTTPS Validation
         run: python main.py --https
 
-      - name: Save State
+      - name: Save Permanent State
         uses: actions/upload-artifact@v4
         with:
-          name: arista-output
-          path: output
+          name: arista-permanent
+          path: |
+            output/best_ips.txt
+            output/live_bank.txt
+            output/tcp_live.txt
+            output/tls_live.txt
+            output/https_live.txt
+            output/fingerprint_results.txt
+            output/geo_cache.json
+            output/scan_cursor.txt
+            output/https_meta.json
           overwrite: true
           retention-days: 3
 
@@ -237,21 +248,30 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
 
-      - name: Restore State
+      - name: Restore Permanent State
         uses: actions/download-artifact@v4
         with:
-          name: arista-output
+          name: arista-permanent
           path: output
         continue-on-error: true
 
       - name: Fingerprint
         run: python main.py --fp
 
-      - name: Save State
+      - name: Save Permanent State
         uses: actions/upload-artifact@v4
         with:
-          name: arista-output
-          path: output
+          name: arista-permanent
+          path: |
+            output/best_ips.txt
+            output/live_bank.txt
+            output/tcp_live.txt
+            output/tls_live.txt
+            output/https_live.txt
+            output/fingerprint_results.txt
+            output/geo_cache.json
+            output/scan_cursor.txt
+            output/https_meta.json
           overwrite: true
           retention-days: 3
 
@@ -270,21 +290,30 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
 
-      - name: Restore State
+      - name: Restore Permanent State
         uses: actions/download-artifact@v4
         with:
-          name: arista-output
+          name: arista-permanent
           path: output
         continue-on-error: true
 
       - name: GEO
         run: python main.py --geo
 
-      - name: Save State
+      - name: Save Permanent State
         uses: actions/upload-artifact@v4
         with:
-          name: arista-output
-          path: output
+          name: arista-permanent
+          path: |
+            output/best_ips.txt
+            output/live_bank.txt
+            output/tcp_live.txt
+            output/tls_live.txt
+            output/https_live.txt
+            output/fingerprint_results.txt
+            output/geo_cache.json
+            output/scan_cursor.txt
+            output/https_meta.json
           overwrite: true
           retention-days: 3
 
@@ -303,21 +332,30 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
 
-      - name: Restore State
+      - name: Restore Permanent State
         uses: actions/download-artifact@v4
         with:
-          name: arista-output
+          name: arista-permanent
           path: output
         continue-on-error: true
 
       - name: Finalize
         run: python main.py --finalize
 
-      - name: Save Final State
+      - name: Save Permanent State
         uses: actions/upload-artifact@v4
         with:
-          name: arista-output
-          path: output
+          name: arista-permanent
+          path: |
+            output/best_ips.txt
+            output/live_bank.txt
+            output/tcp_live.txt
+            output/tls_live.txt
+            output/https_live.txt
+            output/fingerprint_results.txt
+            output/geo_cache.json
+            output/scan_cursor.txt
+            output/https_meta.json
           overwrite: true
           retention-days: 3
 
@@ -328,10 +366,11 @@ jobs:
           mkdir -p output
 
           git add output/best_ips.txt output/domains.txt output/results.txt 2>/dev/null || true
-          git add output/scan_cursor.txt output/current_part.txt 2>/dev/null || true
+          git add output/scan_cursor.txt 2>/dev/null || true
           git add output/tcp_live.txt output/tls_live.txt output/https_live.txt 2>/dev/null || true
-          git add output/fingerprint_results.txt output/scanned_cache.txt 2>/dev/null || true
+          git add output/fingerprint_results.txt 2>/dev/null || true
           git add output/geo_cache.json output/live_bank.txt 2>/dev/null || true
+          git add output/https_meta.json 2>/dev/null || true
 
           if ! git diff --cached --quiet; then
             git commit -m "ARISTA $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
