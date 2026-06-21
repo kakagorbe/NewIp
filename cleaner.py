@@ -155,6 +155,13 @@ def clean_ips():
     total = 0
     processed = 0
 
+    if os.path.exists(OUTPUT_FILE):
+        with open(OUTPUT_FILE, "r", encoding="utf-8") as f:
+            for line in f:
+                ip = line.strip()
+                if ip:
+                    seen.add(ip)
+
     try:
 
         with open(
@@ -186,10 +193,12 @@ def clean_ips():
     except:
         return
 
-    os.replace(
-        TEMP_FILE,
-        OUTPUT_FILE
-    )
+    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+        for ip in sorted(seen):
+            f.write(ip + "\n")
+
+    if os.path.exists(TEMP_FILE):
+        os.remove(TEMP_FILE)
 
     print(
         f"CLEAN IPS={total}"
