@@ -186,5 +186,19 @@ def split_file(
     return OUTPUT_FILE
 
 
+def reset_splitter():
+    reset_cursor()
+    if os.path.exists(OUTPUT_FILE):
+        try:
+            os.remove(OUTPUT_FILE)
+        except:
+            pass
+    if os.path.exists(INPUT_FILE):
+        try:
+            os.remove(INPUT_FILE)
+        except:
+            pass
+
+
 if __name__ == "__main__":
     split_file()
