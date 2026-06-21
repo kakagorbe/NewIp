@@ -1,3 +1,4 @@
+# tls.py
 import ssl
 import socket
 import hashlib
@@ -22,11 +23,7 @@ def cert_meta(cert_bin, cert):
         expire = cert.get("notAfter", "")
     except:
         pass
-    return {
-        "issuer": issuer,
-        "expire": expire,
-        "sha256": sha256
-    }
+    return {"issuer": issuer, "expire": expire, "sha256": sha256}
 
 def tls_check(ip, port, timeout=3):
     cfg = load_config()
@@ -38,7 +35,6 @@ def tls_check(ip, port, timeout=3):
         ctx.set_alpn_protocols(["h2", "http/1.1"])
     except:
         pass
-
     for sni in sni_hosts:
         try:
             with socket.create_connection((ip, port), timeout=timeout) as sock:
@@ -46,12 +42,7 @@ def tls_check(ip, port, timeout=3):
                     cert = ssock.getpeercert()
                     cert_bin = ssock.getpeercert(binary_form=True)
                     meta = cert_meta(cert_bin, cert)
-                    return True, {
-                        "cert": cert,
-                        "meta": meta,
-                        "alpn": ssock.selected_alpn_protocol(),
-                        "sni": sni
-                    }
+                    return True, {"cert": cert, "meta": meta, "alpn": ssock.selected_alpn_protocol(), "sni": sni}
         except:
             continue
     return False, None
