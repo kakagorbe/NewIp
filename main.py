@@ -21,6 +21,7 @@ from validator import validate_domains
 from ranker import rank_results
 
 from cache import optimize_stage_files, compact_cache_files
+from state_manager import compact_artifact, artifact_info
 
 OUTPUT_DIR = "output"
 
@@ -71,6 +72,12 @@ def should_update_bank():
 
 def prepare():
     ensure_output()
+
+    print("COMPACTING ARTIFACT...")
+    stats = compact_artifact()
+    info = artifact_info()
+    print(f"ARTIFACT SIZE: {info['total_size_mb']} MB")
+    print(f"NEW IPS: {stats['live_bank_new_ips']}")
 
     print("COMPACTING CACHE FILES")
     compact_cache_files()
