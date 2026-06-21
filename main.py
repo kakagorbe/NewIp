@@ -50,7 +50,48 @@ def exists(path):
 
 
 def should_update_bank():
-    return True
+    bank_file = "output/ip_bank.txt"
+    clean_file = "output/clean_ips.txt"
+
+    if not exists(bank_file) or not exists(clean_file):
+        return True
+
+    try:
+        mtime = os.path.getmtime(bank_file)
+        last_update = datetime.fromtimestamp(mtime)
+        age = datetime.now() - last_update
+        if age > timedelta(hours=24):
+            print(f"BANK AGE: {age.total_seconds()/3600:.1f} HOURS - UPDATING")
+            return True
+        print(f"BANK AGE: {age.total_seconds()/3600:.1f} HOURS - FRESH")
+        return False
+    except:
+        return True
+
+
+def prepare_artifact():
+    essential_files = [
+        "ip_bank.txt",
+        "clean_ips.txt",
+        "scan_cursor.txt",
+        "current_part.txt",
+        "best_ips.txt",
+        "geo_cache.json"
+    ]
+    temp_files = [
+        "tcp_live.txt",
+        "tls_live.txt",
+        "https_live.txt",
+        "fingerprint_results.txt",
+        "results.txt",
+        "domains_raw.txt",
+        "domains.txt",
+        "live_bank.txt",
+        "scanned_cache.txt"
+    ]
+    for f in temp_files:
+        if os.path.exists(f"output/{f}"):
+            os.remove(f"output/{f}")
 
 
 def prepare():
@@ -70,6 +111,7 @@ def prepare():
 
 def run_tcp():
     prepare()
+    prepare_artifact()
 
     print(
         "ROLLING SPLIT"
