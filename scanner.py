@@ -34,7 +34,7 @@ from cache import (
     compact_cache_files
 )
 
-from livebank import append_live
+from livebank import append_live, read_live_bank
 
 RESULT_FILE = "output/results.txt"
 TCP_BATCH_WRITE_LIMIT = 100
@@ -256,6 +256,7 @@ def tcp_scan(
     )
 
     cache = load_cache()
+    existing_ips = read_live_bank()
 
     total_live = 0
     total_batch = 0
@@ -330,13 +331,21 @@ def tcp_scan(
                         continue
 
         if stage_live:
-            stage_buffer.extend(stage_live)
+            new_items = []
+            for item in stage_live:
+                ip_port = ":".join(item.split(":")[:2])
+                if ip_port not in existing_ips:
+                    new_items.append(item)
+                    existing_ips.add(ip_port)
 
-            if len(stage_buffer) >= TCP_BATCH_WRITE_LIMIT:
-                append_tcp_live(stage_buffer)
-                append_live(stage_buffer)
-                total_live += len(stage_buffer)
-                stage_buffer = []
+            if new_items:
+                stage_buffer.extend(new_items)
+
+                if len(stage_buffer) >= TCP_BATCH_WRITE_LIMIT:
+                    append_tcp_live(stage_buffer)
+                    append_live(stage_buffer)
+                    total_live += len(stage_buffer)
+                    stage_buffer = []
 
         save_cache(
             cache
